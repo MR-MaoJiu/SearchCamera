@@ -1,0 +1,14 @@
+<component name="libraryTable">
+  <library name="Gradle: com.otaliastudios:cameraview:1.2.0@aar">
+    <CLASSES>
+      <root url="jar://$USER_HOME$/.gradle/caches/transforms-2/files-2.1/40aa5780cfe7d0bc3dfde538f25755e2/jetified-cameraview-1.2.0/jars/classes.jar!/" />
+      <root url="file://$USER_HOME$/.gradle/caches/transforms-2/files-2.1/40aa5780cfe7d0bc3dfde538f25755e2/jetified-cameraview-1.2.0/res" />
+    </CLASSES>
+    <JAVADOC>
+      <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/com.otaliastudios/cameraview/1.2.0/3f04a8148135d3e53011f27cd8fe560180be7347/cameraview-1.2.0-javadoc.jar!/" />
+    </JAVADOC>
+    <SOURCES>
+      <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/com.otaliastudios/cameraview/1.2.0/9050e2c25f7f1e190e10a6fc00f3758a7e66fb52/cameraview-1.2.0-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>

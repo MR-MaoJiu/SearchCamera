@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".MainActivity">
+    <com.otaliastudios.cameraview.CameraView
+        android:id="@+id/camera"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:keepScreenOn="true" >
+
+    </com.otaliastudios.cameraview.CameraView>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <Button
+            android:id="@+id/btn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="扫描无线设备"
+            android:textColor="@color/bg"
+            android:background="@drawable/shape"
+            app:layout_constraintBottom_toTopOf="@+id/textView2"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/ccb" />
+
+        <TextView
+            android:id="@+id/textView2"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/colorBlue"
+            android:text="如果发现红点则有可能是针孔摄像头的红外,
+            如果手机震动则可能是有电磁干扰（说明可能有电子设备或金属）
+            如果手机警报且震动说明干扰增强了需要注意扫描的地方
+            扫描时会假死一段时间请耐心等待哦···"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/ccb" />
+
+        <club.yuanwanji.searchcamera.CirCleProgressBar
+            android:id="@+id/ccb"
+            android:layout_width="278dp"
+            android:layout_height="198dp"
+            android:layout_gravity="center_horizontal"
+            app:circle_bg_color="@color/colorBack"
+            app:circle_bg_width="30dp"
+            app:circle_color="@color/colorBlue"
+            app:circle_width="30dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:max_progress="500"
+            app:start_angle="160"
+            app:text_color="@color/colorPrimaryDark"
+            app:text_size="30dp"
+            app:total_angle="221"
+            tools:ignore="MissingConstraints" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+</FrameLayout>
