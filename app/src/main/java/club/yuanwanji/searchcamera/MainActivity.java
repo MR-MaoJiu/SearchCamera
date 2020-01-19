@@ -12,6 +12,7 @@ import android.media.MediaPlayer;
 import android.os.Bundle;
 import android.os.Vibrator;
 import android.util.Log;
+import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
@@ -20,6 +21,7 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import com.otaliastudios.cameraview.CameraView;
 import java.io.IOException;
+import java.net.Socket;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -39,7 +41,10 @@ import android.widget.Toast;
 public class MainActivity extends AppCompatActivity implements SensorEventListener{
     CirCleProgressBar cirCleProgressBar;
     MediaPlayer mediaPlayer = new MediaPlayer();//这个我定义了一个成员函数
+    Socket socket = null;
     private CameraView cameraView;
+    // 支付宝包名
+    private static final String alipay_package_name = "com.eg.android.alipaygphone";
     //匹配C类地址的IP
     public static final String regexCIp = "^192\\.168\\.(\\d{1}|[1-9]\\d|1\\d{2}|2[0-4]\\d|25\\d)\\.(\\d{1}|[1-9]\\d|1\\d{2}|2[0-4]\\d|25\\d)$";
     //匹配A类地址
@@ -95,7 +100,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                     // TODO Auto-generated method stub
                     String ping = MainActivity.this.mPing + mLocAddress
                             + lastAddress;
-                    System.out.println(ping);
                     String currnetIp = mLocAddress + lastAddress;
                     if (mDevAddress.equals(currnetIp)) // 如果与本机IP地址相同,跳过
                         return;
@@ -107,7 +111,15 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                         //Log.e(TAG, "正在扫描的IP地址为：" + currnetIp + "返回值为：" + result);
                         if (result == 0) {
                             Log.e(TAG, "扫描成功,Ip地址为：" + currnetIp);
-                            mIpList.add(currnetIp);
+
+                            socket = new Socket(currnetIp, 81);
+                            boolean isConnected = socket.isConnected() && !socket.isClosed();
+                            if (isConnected) {
+                                mIpList.add(currnetIp);
+                            }
+                            //关闭Socket
+                            socket.close();
+
                         } else {
                             // 扫描失败
                             //Log.e(TAG, "扫描失败");
@@ -123,26 +135,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
             mExecutor.execute(run);
         }
-
         mExecutor.shutdown();
-
-        while (true) {
-            try {
-                if (mExecutor.isTerminated()) {// 扫描结束,开始验证
-                    Log.e(TAG, "扫描结束,总共成功扫描到" + mIpList.size() + "个设备.");
-                   // Log.e("设备列表："+new Gson().toJson(mIpList));
                     return mIpList;
-                }
-            } catch (Exception e) {
-                // TODO: handle exception
-            }
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException e) {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
-            }
-        }
     }
 
     /**
@@ -290,12 +284,20 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                                 "（当然金属或者电子设备都会干扰），如果报警且震动则说明干扰增强，需要我们注意！\n" +
                                 "3.扫描网络设备，连接酒店Wi-Fi点击按钮进行扫描（手机网络桥接或者热点需要关闭），本应用将会扫描每个连接Wi-Fi的设备" +
                                 "如果发现有设备开放了81等摄像头常用端口的设备，将会显示在扫描列表里。" +
-                                "此时我们需要注意查找，当然本应用查找结果仅供参考。")//内容
+                                "此时我们需要注意查找，当然本应用查找结果仅供参考。本应用承诺开源且无广告如果对您有用请打赏一下吧！！！")//内容
                         .setIcon(R.mipmap.logo)//图标
-                        .setNegativeButton("我已阅读并同意", new DialogInterface.OnClickListener() {//添加取消
+                        .setNegativeButton("去打赏", new DialogInterface.OnClickListener() {//添加取消
                             @Override
                             public void onClick(DialogInterface dialogInterface, int i) {
-                                //Toast.makeText(MainActivity.this, "这是取消按钮", Toast.LENGTH_SHORT).show();
+                                if(AlipayUtil.hasInstalledAlipayClient(MainActivity.this)){
+                                   boolean flg= AlipayUtil.startAlipayClient(MainActivity.this, "FKX03798GCD9KN1C5ND28F");  //第二个参数代表要给被支付的二维码code  可以在用草料二维码在线生成
+                                    if(flg)
+                                    {
+                                        Toast.makeText(MainActivity.this, "感谢您的支持我将会加倍努力！！！", Toast.LENGTH_SHORT).show();
+                                    }
+                                }else{
+                                    Toast.makeText(MainActivity.this, "没有检测到支付宝客户端", Toast.LENGTH_SHORT).show();
+                                }
                             }
                         })
                         .create();
@@ -355,5 +357,25 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
 
+    }
+    //声明一个long类型变量：用于存放上一点击“返回键”的时刻
+    private long mExitTime;
+    @Override
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        //判断用户是否点击了“返回键”
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+            //与上次点击返回键时刻作差
+            if ((System.currentTimeMillis() - mExitTime) > 2000) {
+                //大于2000ms则认为是误操作，使用Toast进行提示
+                Toast.makeText(this, "再按一次退出程序", Toast.LENGTH_SHORT).show();
+                //并记录下本次点击“返回键”的时刻，以便下次进行判断
+                mExitTime = System.currentTimeMillis();
+            } else {
+                //小于2000ms则认为是用户确实希望退出程序-调用System.exit()方法进行退出
+                System.exit(0);
+            }
+            return true;
+        }
+        return super.onKeyDown(keyCode, event);
     }
 }
