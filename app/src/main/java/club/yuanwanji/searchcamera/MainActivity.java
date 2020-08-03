@@ -1,6 +1,13 @@
 package club.yuanwanji.searchcamera;
 
+import android.Manifest;
+import android.annotation.SuppressLint;
+import android.app.Activity;
+import android.content.Context;
 import android.content.DialogInterface;
+import android.content.Intent;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.content.res.AssetFileDescriptor;
 import android.graphics.Color;
 import android.hardware.Sensor;
@@ -9,7 +16,12 @@ import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
+import android.os.Handler;
+import android.os.Message;
 import android.os.Vibrator;
 import android.util.Log;
 import android.view.KeyEvent;
@@ -19,9 +31,18 @@ import android.view.MenuItem;
 import android.view.View;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.FileProvider;
 import com.otaliastudios.cameraview.CameraView;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
 import java.net.Socket;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -35,8 +56,14 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import android.text.TextUtils;
 import android.widget.Button;
+import android.widget.EditText;
+import android.widget.ProgressBar;
 import android.widget.Toast;
-
+import org.json.JSONException;
+import org.json.JSONObject;
+import java.net.MalformedURLException;
+import android.app.AlertDialog.Builder;
+import android.content.DialogInterface.OnClickListener;
 
 public class MainActivity extends AppCompatActivity implements SensorEventListener{
     CirCleProgressBar cirCleProgressBar;
@@ -64,6 +91,42 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private List<String> mIpList = new ArrayList<String>();// ping成功的IP地址
     private ThreadPoolExecutor mExecutor;// 线程池对象
     String ipstr;
+    int port=81;
+    String serveraddress="app.yuanwanji.club";
+    String body="软件更新";
+    String appurl="";
+    // 上下文对象
+    private Context mContext;
+    // 下载进度条
+    private ProgressBar progressBar ;
+    // 是否终止下载
+    private boolean isInterceptDownload = false;
+    //进度条显示数值
+    AlertDialog alertDialog3;
+    private int progress = 0;
+    String code;
+    private static final String savePath = Environment.getExternalStorageDirectory().getPath();
+    private static final String saveFileName = savePath + "/摄像头探测器.apk";
+    private static final int REQUEST_EXTERNAL_STORAGE = 1;
+    private static String[] PERMISSIONS_STORAGE = {
+            Manifest.permission.READ_EXTERNAL_STORAGE,
+            Manifest.permission.WRITE_EXTERNAL_STORAGE
+    };
+    /**
+     * 在对sd卡进行读写操作之前调用这个方法
+     * Checks if the app has permission to write to device storage
+     * If the app does not has permission then the user will be prompted to grant permissions
+     */
+    public static void verifyStoragePermissions(Activity activity) {
+        // Check if we have write permission
+        int permission = ActivityCompat.checkSelfPermission(activity, Manifest.permission.WRITE_EXTERNAL_STORAGE);
+        if (permission != PackageManager.PERMISSION_GRANTED) {
+            // We don't have permission so prompt the user
+            ActivityCompat.requestPermissions(activity, PERMISSIONS_STORAGE, REQUEST_EXTERNAL_STORAGE);
+        }
+    }
+
+
     /**
      * TODO<扫描局域网内ip，找到对应服务器>
      *
@@ -112,7 +175,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                         if (result == 0) {
                             Log.e(TAG, "扫描成功,Ip地址为：" + currnetIp);
 
-                            socket = new Socket(currnetIp, 81);
+                            socket = new Socket(currnetIp, port);
                             boolean isConnected = socket.isConnected() && !socket.isClosed();
                             if (isConnected) {
                                 mIpList.add(currnetIp);
@@ -137,6 +200,217 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         }
         mExecutor.shutdown();
                     return mIpList;
+    }
+    /**
+     * 弹出对话框
+     */
+    protected void showUpdataDialog() {
+        AlertDialog.Builder builer = new AlertDialog.Builder(this) ;
+        builer.setTitle("版本升级");
+        builer.setMessage(body);
+
+        //当点确定按钮时从服务器上下载 新的apk 然后安装
+        builer.setPositiveButton("确定", (dialog, which) -> downloadApk());
+        //当点取消按钮时不做任何举动
+        builer.setNegativeButton("取消", (dialogInterface, i) -> {});
+        AlertDialog dialog = builer.create();
+        dialog.show();
+    }
+    /**
+     * 下载apk
+     */
+    @SuppressLint("WrongConstant")
+    private void downloadApk(){
+        progressBar=new ProgressBar(this,null, android.R.attr.progressBarStyleHorizontal);
+
+         alertDialog3 = new AlertDialog.Builder(MainActivity.this)
+                .setTitle("更新中：")//标题
+                .setView(progressBar)
+                .setIcon(R.mipmap.logo)//图标
+                .create();
+
+        alertDialog3.show();
+        //开启另一线程下载
+        Thread downLoadThread = new Thread(downApkRunnable);
+        downLoadThread.start();
+    }
+    /**
+     * 从服务器下载新版apk的线程
+     */
+    private Runnable downApkRunnable = new Runnable(){
+        @Override
+        public void run() {
+            String path = android.os.Environment.getExternalStorageState();
+            System.out.println(path);
+            if (!android.os.Environment.getExternalStorageState().equals(android.os.Environment.MEDIA_MOUNTED)) {
+                //如果没有SD卡
+                Builder builder = new Builder(mContext);
+                builder.setTitle("提示");
+                builder.setMessage("当前设备无SD卡，数据无法下载");
+                builder.setPositiveButton("确定", new OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        dialog.dismiss();
+                    }
+                });
+                builder.show();
+                return;
+            }else if(appurl != null){
+                try {
+                    //服务器上新版apk地址
+                    URL url = new URL(appurl);
+                    HttpURLConnection conn = (HttpURLConnection)url.openConnection();
+                    conn.connect();
+                    int length = conn.getContentLength();
+                    InputStream is = conn.getInputStream();
+
+                    File file = new File(savePath);
+                    if (!file.exists()) {
+                        file.mkdirs();
+                    }
+                    String apkFile = saveFileName;
+                    File ApkFile = new File(apkFile);
+                    FileOutputStream fos = new FileOutputStream(ApkFile);
+                    int count = 0;
+                    byte buf[] = new byte[1024];
+
+                    do{
+                        int numRead = is.read(buf);
+                        count += numRead;
+                        //更新进度条
+                        progress = (int) (((float) count / length) * 100);
+                        handler.sendEmptyMessage(1);
+                        if(numRead <= 0){
+                            //下载完成通知安装
+                            handler.sendEmptyMessage(0);
+                            isInterceptDownload = true;
+                            alertDialog3.dismiss();
+                            break;
+                        }
+                        fos.write(buf,0,numRead);
+                        //当点击取消时，则停止下载
+                    }while(!isInterceptDownload);
+                    fos.close();
+                    is.close();
+                } catch (MalformedURLException e) {
+                    e.printStackTrace();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }else{
+                Builder builder = new Builder(mContext);
+                builder.setTitle("提示");
+                builder.setMessage("获取服务器版本信息错误，数据无法下载");
+                builder.setPositiveButton("确定", new OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        dialog.dismiss();
+                    }
+                });
+                builder.show();
+            }
+        }
+    };
+    /**
+     * 声明一个handler来跟进进度条
+     */
+    @SuppressLint("HandlerLeak")
+    private Handler handler = new Handler() {
+        public void handleMessage(Message msg) {
+            switch (msg.what) {
+                case 1:
+                    // 更新进度情况
+                    progressBar.setProgress(progress);
+                    break;
+                case 0:
+                    progressBar.setVisibility(View.INVISIBLE);
+                    // 安装apk文件
+                    installApk();
+                    break;
+                default:
+                    break;
+            }
+        };
+    };
+    /**
+     * 安装apk
+     */
+    private void installApk() {
+        Log.i(TAG, "开始执行安装: " + saveFileName);
+        File apkFile = new File(saveFileName);
+        Intent intent = new Intent(Intent.ACTION_VIEW);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            Log.w(TAG, "版本大于 N ，开始使用 fileProvider 进行安装");
+            intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            Uri contentUri = FileProvider.getUriForFile(
+                    mContext
+                    , "club.yuanwanji.searchcamera"
+                    , apkFile);
+            intent.setDataAndType(contentUri, "application/vnd.android.package-archive");
+        } else {
+            Log.w(TAG, "正常进行安装");
+            intent.setDataAndType(Uri.fromFile(apkFile), "application/vnd.android.package-archive");
+        }
+        startActivity(intent);
+    }
+    public String getVersionName() throws Exception
+    {
+        // 获取packagemanager的实例
+        PackageManager packageManager = getPackageManager();
+        // getPackageName()是你当前类的包名，0代表是获取版本信息
+        PackageInfo packInfo = packageManager.getPackageInfo(getPackageName(),0);
+        String version = packInfo.versionName;
+        return version;
+    }
+
+    /**
+     * 获取最新版本信息
+     * @return
+     * @throws IOException
+     * @throws JSONException
+     */
+    public void Update(){
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    //你的URL
+                    String url_s = "http://"+serveraddress+"/version.txt";
+                    URL url = new URL(url_s);
+                    HttpURLConnection conn = (HttpURLConnection)url.openConnection();
+                    //设置连接属性。不喜欢的话直接默认也阔以
+                    conn.setConnectTimeout(5000);//设置超时
+                    conn.setUseCaches(false);//数据不多不用缓存了
+
+                    //这里连接了
+                    conn.connect();
+                    //这里才真正获取到了数据
+                    InputStream inputStream = conn.getInputStream();
+                    InputStreamReader input = new InputStreamReader(inputStream);
+                    BufferedReader buffer = new BufferedReader(input);
+                    if(conn.getResponseCode() == 200){//200意味着返回的是"OK"
+                        String inputLine;
+                        StringBuffer resultData  = new StringBuffer();//StringBuffer字符串拼接很快
+                        while((inputLine = buffer.readLine())!= null){
+                            resultData.append(inputLine);
+                        }
+                        String json = resultData.toString();
+                        JSONObject jsonObject = new JSONObject(json);
+                        code = jsonObject.getString("code");
+                        appurl=jsonObject.getString("url");
+                        body=jsonObject.getString("update");
+//                        if(!code.trim().equals(getVersionName().trim()))
+//                        {
+//                            Log.e("VVV",code+"   "+getVersionName());
+//                            showUpdataDialog();
+//                        }
+                    }
+                } catch(Exception e){
+                    e.printStackTrace();
+                }
+            }
+        }).start();
     }
 
     /**
@@ -202,6 +476,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         cirCleProgressBar=findViewById(R.id.ccb);
        Button btn=findViewById(R.id.btn);
         cameraView = findViewById(R.id.camera);
+        Update();
+        verifyStoragePermissions(MainActivity.this);
         btn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -272,6 +548,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     }
     @Override
     public boolean onOptionsItemSelected(MenuItem item){
+         final EditText et = new EditText(this);//端口输入框
         switch (item.getItemId()) {
             case R.id.action_cart://监听菜单按钮
                 AlertDialog alertDialog1 = new AlertDialog.Builder(this)
@@ -284,7 +561,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                                 "（当然金属或者电子设备都会干扰），如果报警且震动则说明干扰增强，需要我们注意！\n" +
                                 "3.扫描网络设备，连接酒店Wi-Fi点击按钮进行扫描（手机网络桥接或者热点需要关闭），本应用将会扫描每个连接Wi-Fi的设备" +
                                 "如果发现有设备开放了81等摄像头常用端口的设备，将会显示在扫描列表里。" +
-                                "此时我们需要注意查找，当然本应用查找结果仅供参考。本应用承诺开源且无广告如果对您有用请打赏一下吧！！！")//内容
+                                "此时我们需要注意查找，当然本应用查找结果仅供参考。本应用承诺开源且无广告如果对您有用请打赏一下吧！！！打赏的钱将用来维护应用和服务器支出！！！\n" +
+                                "4.所有打赏的人将有希望获得最新版应用哦！")//内容
                         .setIcon(R.mipmap.logo)//图标
                         .setNegativeButton("去打赏", new DialogInterface.OnClickListener() {//添加取消
                             @Override
@@ -300,8 +578,63 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                                 }
                             }
                         })
+                        .setPositiveButton("去分享", new DialogInterface.OnClickListener() {//添加取消
+                            @Override
+                            public void onClick(DialogInterface dialogInterface, int i) {
+                                Intent share_intent = new Intent();
+
+                                share_intent.setAction(Intent.ACTION_SEND);
+
+                                share_intent.setType("text/plain");
+
+                                share_intent.putExtra(Intent.EXTRA_SUBJECT, "f分享");
+
+                                share_intent.putExtra(Intent.EXTRA_TEXT, "Hi~最近发现一款很实用的APP：摄像头探测器\n这是一款免费的应用而且无广告哦！快去下载吧：http://app.yuanwanji.club" );
+
+                                share_intent = Intent.createChooser(share_intent, "分享");
+
+                                startActivity(share_intent);
+                            }
+                        })
                         .create();
                 alertDialog1.show();
+                break;
+            case R.id.action_setting:
+                AlertDialog alertDialog2 = new AlertDialog.Builder(this)
+                        .setTitle("设置：")//标题
+                        .setMessage("这里可以设置您要扫描的端口一般为81端口，推荐设置81、80、888：\n"
+                               )//内容
+                        .setIcon(R.mipmap.logo)//图标
+                       .setView(et)
+                        .setPositiveButton("设置", new DialogInterface.OnClickListener() {//添加取消
+                            @Override
+                            public void onClick(DialogInterface dialogInterface, int i) {
+                                try {
+                                   port= Integer.parseInt(et.getText().toString());
+                                    Toast.makeText(MainActivity.this,"设置成功当前扫描端口为："+port,Toast.LENGTH_SHORT).show();
+                                } catch (NumberFormatException e) {
+                                    Toast.makeText(MainActivity.this,"请输入数字",Toast.LENGTH_SHORT).show();
+                                }
+
+                            }
+                        })
+                        .create();
+                alertDialog2.show();
+                break;
+            case R.id.action_update:
+                try {
+                    if(!code.trim().equals(getVersionName().trim()))
+                    {
+                        Log.e("VVV",code+"   "+getVersionName());
+                        showUpdataDialog();
+                    }else {
+                        Toast.makeText(MainActivity.this,"当前已是最新版本",Toast.LENGTH_SHORT).show();
+                    }
+
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+
                 break;
         }
         return super.onOptionsItemSelected(item);
