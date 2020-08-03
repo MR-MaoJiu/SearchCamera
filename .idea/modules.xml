@@ -2,8 +2,8 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/searchcamera.iml" filepath="$PROJECT_DIR$/searchcamera.iml" />
-      <module fileurl="file://$PROJECT_DIR$/app/app.iml" filepath="$PROJECT_DIR$/app/app.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/SearchCamera.iml" filepath="$PROJECT_DIR$/.idea/modules/SearchCamera.iml" group="SearchCamera" />
+      <module fileurl="file://$PROJECT_DIR$/app/app.iml" filepath="$PROJECT_DIR$/app/app.iml" group="SearchCamera/app" />
     </modules>
   </component>
 </project>
